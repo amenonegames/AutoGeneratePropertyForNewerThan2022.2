@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "dgSpecHash": "FOvv6c5Fx5dh7wz9LWCUeELrvKvL32gx6Hjt9MOGfjuU21+g5XI39PY80LN3rGFY6z44ru+y5c5bE/Jme3YENg==",
+  "success": true,
+  "projectFilePath": "C:\\Users\\tamed\\Documents\\project\\AutoGeneratePropertyForNewerThan2022.2\\Amenonegames.AutoPropertyGenerator\\Amenonegames.AutoPropertyGenerator\\Amenonegames.AutoPropertyGenerator.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\tamed\\.nuget\\packages\\microsoft.codeanalysis.analyzers\\3.3.3\\microsoft.codeanalysis.analyzers.3.3.3.nupkg.sha512",
+    "C:\\Users\\tamed\\.nuget\\packages\\microsoft.codeanalysis.common\\4.1.0\\microsoft.codeanalysis.common.4.1.0.nupkg.sha512",
+    "C:\\Users\\tamed\\.nuget\\packages\\microsoft.codeanalysis.csharp\\4.1.0\\microsoft.codeanalysis.csharp.4.1.0.nupkg.sha512",
+    "C:\\Users\\tamed\\.nuget\\packages\\microsoft.netcore.platforms\\1.1.0\\microsoft.netcore.platforms.1.1.0.nupkg.sha512",
+    "C:\\Users\\tamed\\.nuget\\packages\\netstandard.library\\2.0.3\\netstandard.library.2.0.3.nupkg.sha512",
+    "C:\\Users\\tamed\\.nuget\\packages\\polysharp\\1.14.1\\polysharp.1.14.1.nupkg.sha512",
+    "C:\\Users\\tamed\\.nuget\\packages\\system.buffers\\4.5.1\\system.buffers.4.5.1.nupkg.sha512",
+    "C:\\Users\\tamed\\.nuget\\packages\\system.collections.immutable\\5.0.0\\system.collections.immutable.5.0.0.nupkg.sha512",
+    "C:\\Users\\tamed\\.nuget\\packages\\system.memory\\4.5.4\\system.memory.4.5.4.nupkg.sha512",
+    "C:\\Users\\tamed\\.nuget\\packages\\system.numerics.vectors\\4.4.0\\system.numerics.vectors.4.4.0.nupkg.sha512",
+    "C:\\Users\\tamed\\.nuget\\packages\\system.reflection.metadata\\5.0.0\\system.reflection.metadata.5.0.0.nupkg.sha512",
+    "C:\\Users\\tamed\\.nuget\\packages\\system.runtime.compilerservices.unsafe\\5.0.0\\system.runtime.compilerservices.unsafe.5.0.0.nupkg.sha512",
+    "C:\\Users\\tamed\\.nuget\\packages\\system.text.encoding.codepages\\4.5.1\\system.text.encoding.codepages.4.5.1.nupkg.sha512",
+    "C:\\Users\\tamed\\.nuget\\packages\\system.threading.tasks.extensions\\4.5.4\\system.threading.tasks.extensions.4.5.4.nupkg.sha512"
+  ],
+  "logs": []
+}
