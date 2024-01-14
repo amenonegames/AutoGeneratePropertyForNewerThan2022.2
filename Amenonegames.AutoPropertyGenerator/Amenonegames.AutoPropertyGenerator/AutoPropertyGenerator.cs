@@ -5,6 +5,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using Amenonegames.SourceGenerator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.DotnetRuntime.Extensions;
@@ -34,12 +35,81 @@ namespace Amenonegames.AutoPropertyGenerator
                 (sourceProductionContext, t) =>
                 {
                     var (compilation, list) = t;
-                    Emit(sourceProductionContext, t);
+                    var references = ReferenceSymbols.Create(compilation);
+                    if (references is null)
+                    {
+                        return;
+                    }
+                    
+                    var codeWriter = new CodeWriter();
+                    
+                    foreach (var (x,_) in list)
+                    {
+                        var typeMeta = new TypeMeta(
+                            (TypeDeclarationSyntax)x.TargetNode,
+                            (INamedTypeSymbol)x.TargetSymbol,
+                            x.Attributes.First(),
+                            references);
+
+                        if (TryEmit(typeMeta, codeWriter, references, sourceProductionContext))
+                        {
+                            var fullType = typeMeta.FullTypeName
+                                .Replace("global::", "")
+                                .Replace("<", "_")
+                                .Replace(">", "_");
+                            sourceProductionContext.AddSource($"{fullType}.g.cs", codeWriter.ToString());
+                        }
+                        codeWriter.Clear();
+                    }
                     
                 }); //context.RegisterForSyntaxNotifications( () => new SyntaxReceiver() );
         }
-        
-        
+
+        static bool TryEmit(
+            TypeMeta typeMeta,
+            CodeWriter codeWriter,
+            ReferenceSymbols references,
+            in SourceProductionContext context)
+        {
+            try
+            {
+                var error = false;
+                
+                // 親クラスを取得
+                var classDeclaration = typeMeta.Syntax.Parent as ClassDeclarationSyntax;
+
+                if (classDeclaration == null)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        DiagnosticDescriptors.MustBePartial,
+                        typeMeta.Syntax.Identifier.GetLocation(),
+                        typeMeta.Symbol.Name));
+                    error = true;
+                }
+                
+                // verify is partial
+                if (!typeMeta.IsPartial())
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(
+                        DiagnosticDescriptors.MustBePartial,
+                        typeMeta.Syntax.Identifier.GetLocation(),
+                        typeMeta.Symbol.Name));
+                    error = true;
+                }
+            }
+            catch (Exception ex)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.UnexpectedErrorDescriptor,
+                    Location.None,
+                    ex.ToString()));
+                return false;
+            }
+            
+            return true;
+        }
+
+
         private void SetDefaultAttribute(IncrementalGeneratorPostInitializationContext context)
         {
             // AutoPropertyAttributeのコード本体
