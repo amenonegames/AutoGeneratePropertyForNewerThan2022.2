@@ -2,6 +2,8 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Amenonegames.AutoPropertyGenerator", "Amenonegames.AutoPropertyGenerator\Amenonegames.AutoPropertyGenerator.csproj", "{596E62DE-5FE9-416B-A281-55FA723CF336}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SandBox", "SandBox\SandBox.csproj", "{AC998168-2C82-47BC-8BC8-4B82EA5C801A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -12,5 +14,9 @@ Global
 		{596E62DE-5FE9-416B-A281-55FA723CF336}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{596E62DE-5FE9-416B-A281-55FA723CF336}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{596E62DE-5FE9-416B-A281-55FA723CF336}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AC998168-2C82-47BC-8BC8-4B82EA5C801A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AC998168-2C82-47BC-8BC8-4B82EA5C801A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AC998168-2C82-47BC-8BC8-4B82EA5C801A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AC998168-2C82-47BC-8BC8-4B82EA5C801A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

@@ -28,10 +28,6 @@ public class ReferenceSymbols
 {
     public static ReferenceSymbols? Create(Compilation compilation)
     {
-        var yamlObjectAttribute = compilation.GetTypeByMetadataName("VYaml.Annotations.YamlObjectAttribute");
-        if (yamlObjectAttribute is null)
-            return null;
-
         return new ReferenceSymbols
         {
             AXSAttribute = compilation.GetTypeByMetadataName("AutoProperty.AXS")!,

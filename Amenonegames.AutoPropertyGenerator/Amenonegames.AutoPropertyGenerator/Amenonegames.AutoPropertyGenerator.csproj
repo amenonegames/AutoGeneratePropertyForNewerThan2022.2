@@ -4,6 +4,9 @@
         <TargetFramework>netstandard2.0</TargetFramework>
         <LangVersion>latest</LangVersion>
         <Nullable>enable</Nullable>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <DevelopmentDependency>true</DevelopmentDependency>
+        <IsRoslynComponent>true</IsRoslynComponent>
     </PropertyGroup>
 
     <ItemGroup>

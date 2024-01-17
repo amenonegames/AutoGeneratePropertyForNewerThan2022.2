@@ -46,14 +46,14 @@ class UnionMeta
     }
 }
 
-class FieldTypeMeta
+class VariableTypeMeta
 {
-    public FieldDeclarationSyntax Syntax { get; }
-    public INamedTypeSymbol Symbol { get; }
+    public VariableDeclaratorSyntax Syntax { get; }
+    public IFieldSymbol Symbol { get; }
     public ImmutableArray<AttributeData> AttributeDatas { get; }
     public string TypeName { get; }
     public string FullTypeName { get; }
-    public IReadOnlyList<IMethodSymbol> Constructors { get; }
+    //public IReadOnlyList<IMethodSymbol> Constructors { get; }
     public AXS AXSArgument { get; }
     public ITypeSymbol? SourceType { get; }
     public ITypeSymbol? TargetType { get; }
@@ -61,19 +61,20 @@ class FieldTypeMeta
     public ClassDeclarationSyntax? ClassSyntax;
     public INamedTypeSymbol ClassSymbol { get; }
     
-    public IEnumerable<SyntaxToken> VariableSyntax => GetVariableSyntax(Syntax);
+    //public IEnumerable<SyntaxToken> VariableSyntax => GetVariableSyntax(Syntax);
     ReferenceSymbols references;
 
-    public FieldTypeMeta(
+    public VariableTypeMeta(
         Compilation? compilation,
-        FieldDeclarationSyntax syntax,
-        INamedTypeSymbol symbol,
+        VariableDeclaratorSyntax syntax,
+        IFieldSymbol symbol,
         ImmutableArray<AttributeData> attr,
         ReferenceSymbols references)
     {
         Syntax = syntax;
         Symbol = symbol;
-        if (compilation != null) SourceType = GetFieldType(syntax, compilation);
+        
+        if (compilation != null) SourceType = GetVariableTypeSymbol(Syntax, compilation);
         TargetType = SourceType;
         AXSArgument = AXS.PublicGet;
         
@@ -108,9 +109,9 @@ class FieldTypeMeta
         }
 
 
-        Constructors = symbol.InstanceConstructors
-            .Where(x => !x.IsImplicitlyDeclared) // remove empty ctor(struct always generate it), record's clone ctor
-            .ToArray();
+        // Constructors = symbol.InstanceConstructors
+        //     .Where(x => !x.IsImplicitlyDeclared) // remove empty ctor(struct always generate it), record's clone ctor
+        //     .ToArray();
 
 
     }
@@ -134,15 +135,29 @@ class FieldTypeMeta
 
         return typeSymbol;
     }
+    
+    TypeSyntax GetVariableType(VariableDeclaratorSyntax variableDeclarator)
+    {
+        var parentDeclaration = variableDeclarator.Parent as VariableDeclarationSyntax;
+        return parentDeclaration?.Type;
+    }
+
+    // セマンティックモデルを使用して型シンボルを取得（オプショナル）
+    ITypeSymbol GetVariableTypeSymbol(VariableDeclaratorSyntax variableDeclarator, Compilation compilation)
+    {
+        var semanticModel = compilation.GetSemanticModel(variableDeclarator.SyntaxTree);
+        var typeSyntax = GetVariableType(variableDeclarator);
+        return typeSyntax != null ? semanticModel.GetTypeInfo(typeSyntax).Type : null;
+    }
 
     /// <summary>
     /// TypeDeclarationSyntaxがfieldDeclarationであることを前提にする
     /// </summary>
-    /// <param name="fieldDeclaration"></param>
+    /// <param name="variableDeclaratorSyntax"></param>
     /// <returns></returns>
-    ClassDeclarationSyntax? GetContainingClassSyntax(FieldDeclarationSyntax fieldDeclaration)
+    ClassDeclarationSyntax? GetContainingClassSyntax(VariableDeclaratorSyntax variableDeclaratorSyntax)
     {
-        var parent = fieldDeclaration.Parent;
+        var parent = variableDeclaratorSyntax.Parent;
         while (parent != null)
         {
             if (parent is ClassDeclarationSyntax classDeclaration)
@@ -155,14 +170,5 @@ class FieldTypeMeta
         return null;
     }
     
-    public bool IsPartial()
-    {
-        return Syntax.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword));
-    }
-
-    public bool IsNested()
-    {
-        return Syntax.Parent is TypeDeclarationSyntax;
-    }
     
 }

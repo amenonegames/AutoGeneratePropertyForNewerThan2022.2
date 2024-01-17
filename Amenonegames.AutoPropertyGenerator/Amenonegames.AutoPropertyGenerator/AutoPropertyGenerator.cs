@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Diagnostics;
@@ -26,16 +27,22 @@ namespace Amenonegames.AutoPropertyGenerator
                 (
                     context,
                     "AutoProperty.AutoPropAttribute",
-                    static (node, cancellation) => node is FieldDeclarationSyntax,
+                    static (node, cancellation) => true,//node is FieldDeclarationSyntax,
                     static (cont, cancellation) => cont
                 )
-                .Combine(context.CompilationProvider);
-
+                .Combine(context.CompilationProvider)
+                .WithComparer(Comparer.Instance);
+            
+            
             context.RegisterSourceOutput(
                 context.CompilationProvider.Combine(provider.Collect()),
                 (sourceProductionContext, t) =>
                 {
+
+                    
                     var (compilation, list) = t;
+                    
+                    
                     var references = ReferenceSymbols.Create(compilation);
                     if (references is null)
                     {
@@ -43,23 +50,29 @@ namespace Amenonegames.AutoPropertyGenerator
                     }
                     
                     var codeWriter = new CodeWriter();
-
-                    var typeMetaList = new List<FieldTypeMeta>();
+                    var typeMetaList = new List<VariableTypeMeta>();
+                    
+                    var typemetalistCount = 0;
+                    var groupCount = 0;
                     
                     foreach (var (x,y) in list)
                     {
-                        typeMetaList.Add
-                        (
-                            new FieldTypeMeta(y,
-                            (FieldDeclarationSyntax)x.TargetNode,
-                            (INamedTypeSymbol)x.TargetSymbol,
-                            x.Attributes,
-                            references)
-                        );
+
+                            typeMetaList.Add
+                            (
+                                new VariableTypeMeta(y,
+                                    (VariableDeclaratorSyntax)x.TargetNode,
+                                    (IFieldSymbol)x.TargetSymbol,
+                                    x.Attributes,
+                                    references)
+                            );
+                            typemetalistCount++;
+                        
+                        
                     }
-
+                    
                     var classGrouped = typeMetaList.GroupBy( x  => x.ClassSymbol);
-
+                    
                     foreach (var classed in classGrouped)
                     {
                         if (TryEmit(classed, codeWriter, references, sourceProductionContext))
@@ -68,18 +81,21 @@ namespace Amenonegames.AutoPropertyGenerator
                             sourceProductionContext.AddSource($"{className}.g.cs", codeWriter.ToString());
                         }
                         codeWriter.Clear();
+                        groupCount++;
                     }
-                    
-                }); //context.RegisterForSyntaxNotifications( () => new SyntaxReceiver() );
+
+
+                }); 
         }
+        
 
         static bool TryEmit(
-            IGrouping<INamedTypeSymbol,FieldTypeMeta>? typeMetaGroup,
+            IGrouping<INamedTypeSymbol,VariableTypeMeta>? typeMetaGroup,
             CodeWriter codeWriter,
             ReferenceSymbols references,
             in SourceProductionContext context)
         {
-            FieldTypeMeta[] fieldTypeMetas = new FieldTypeMeta[] { };
+            VariableTypeMeta[] variableTypeMetas = new VariableTypeMeta[] { };
             INamedTypeSymbol classSymbol = null;
             ClassDeclarationSyntax? classSyntax = null;
             var error = false;
@@ -88,7 +104,7 @@ namespace Amenonegames.AutoPropertyGenerator
             {
                 if (typeMetaGroup is not null)
                 {
-                    fieldTypeMetas = typeMetaGroup.ToArray();
+                    variableTypeMetas = typeMetaGroup.ToArray();
                     // 親クラスを取得
                     classSymbol = typeMetaGroup.Key;
                     classSyntax = typeMetaGroup.First().ClassSyntax;
@@ -98,8 +114,8 @@ namespace Amenonegames.AutoPropertyGenerator
                 {
                     context.ReportDiagnostic(Diagnostic.Create(
                         DiagnosticDescriptors.ClassNotFound,
-                        fieldTypeMetas.First().Syntax.GetLocation(),
-                        String.Join("/",fieldTypeMetas.Select(x => x.VariableSyntax))));
+                        variableTypeMetas.First().Syntax.GetLocation(),
+                        String.Join("/",variableTypeMetas.Select(x => x.Syntax.ToString()))));
                     error = true;
                 }
                 // verify is partial
@@ -125,7 +141,7 @@ namespace Amenonegames.AutoPropertyGenerator
             try
             {
                 var nameSpaceIsGlobal = classSymbol != null && classSymbol.ContainingNamespace.IsGlobalNamespace;
-                var nameSpaceStr = nameSpaceIsGlobal ? "" : $"namespace {classSymbol.ContainingNamespace.ToDisplayString()}\n{{\n";
+                var nameSpaceStr = nameSpaceIsGlobal ? "" : $"namespace {classSymbol.ContainingNamespace.ToDisplayString()}";
                 var classAccessiblity = classSymbol?.DeclaredAccessibility.ToString().ToLower();
                 
                 codeWriter.AppendLine(nameSpaceStr);
@@ -133,22 +149,23 @@ namespace Amenonegames.AutoPropertyGenerator
                 
                 codeWriter.AppendLine("// This class is generated by AutoPropertyGenerator.");
                 codeWriter.AppendLine($"{classAccessiblity} partial class {classSymbol?.Name}");
+                codeWriter.BeginBlock();
                 
-                foreach (var fieldtypeMeta in fieldTypeMetas)
+                foreach (var variableTypeMeta in variableTypeMetas)
                 {
-                    var className = fieldtypeMeta?.TargetType?.ToDisplayString();
-                    var sourceClassName = fieldtypeMeta?.TargetType?.ToDisplayString();
-                    if (fieldtypeMeta?.TargetType?.Name is null)
+                    var className = variableTypeMeta?.TargetType?.ToDisplayString();
+                    var sourceClassName = variableTypeMeta?.SourceType?.ToDisplayString();
+                    if (variableTypeMeta?.TargetType?.Name is null)
                     {
                         context.ReportDiagnostic(Diagnostic.Create(
                             DiagnosticDescriptors.VaribleNameNotFound,
-                            fieldtypeMeta.Syntax.GetLocation(),
-                            String.Join("/",fieldtypeMeta.VariableSyntax)));
+                            variableTypeMeta.Syntax.GetLocation(),
+                            String.Join("/",variableTypeMeta.Syntax.ToString())));
                         error = true;
                     }
-                    var propertyName = GetPropertyName(fieldtypeMeta?.TargetType?.Name);
+                    var propertyName = GetPropertyName(variableTypeMeta?.Syntax.Identifier.ValueText);
                     bool typeIsSame = className == sourceClassName;
-                    switch (fieldtypeMeta.AXSArgument)
+                    switch (variableTypeMeta.AXSArgument)
                     {
                         case AXS.PrivateGet:
                         case AXS.PrivateGetSet:
@@ -177,29 +194,29 @@ namespace Amenonegames.AutoPropertyGenerator
                         default:
                             context.ReportDiagnostic(Diagnostic.Create(
                                 DiagnosticDescriptors.AXSNotFound,
-                                fieldtypeMeta.Syntax.GetLocation(),
-                                String.Join("/",fieldtypeMeta.VariableSyntax)));
+                                variableTypeMeta.Syntax.GetLocation(),
+                                String.Join("/",variableTypeMeta.Syntax.ToString())));
                             error = true;
                             break;
                     }
                     
-                    codeWriter.Append($" {className} {propertyName}", false);
+                    codeWriter.AppendLine($" {className} {propertyName}");
                     codeWriter.BeginBlock();
                     codeWriter.AppendLine("get");
                     codeWriter.BeginBlock();
                     
                     if (typeIsSame)
                     {
-                        codeWriter.AppendLine($"return this.{fieldtypeMeta.Symbol.Name};");
+                        codeWriter.AppendLine($"return this.{variableTypeMeta.Symbol.Name};");
                         codeWriter.EndBlock();
                     }
                     else
                     {
-                        codeWriter.AppendLine($"return ({className})this.{fieldtypeMeta.Symbol.Name};");
+                        codeWriter.AppendLine($"return ({className})this.{variableTypeMeta.Symbol.Name};");
                         codeWriter.EndBlock();
                     }
 
-                    switch (fieldtypeMeta.AXSArgument)
+                    switch (variableTypeMeta.AXSArgument)
                     {
                         case AXS.PrivateGetSet:
                         case AXS.ProtectedGetSet:
@@ -210,12 +227,12 @@ namespace Amenonegames.AutoPropertyGenerator
                             codeWriter.BeginBlock();
                             if (typeIsSame)
                             {
-                                codeWriter.AppendLine($"this.{fieldtypeMeta.Symbol.Name} = value;");
+                                codeWriter.AppendLine($"this.{variableTypeMeta.Symbol.Name} = value;");
                                 codeWriter.EndBlock();
                             }
                             else
                             {
-                                codeWriter.AppendLine($"this.{fieldtypeMeta.Symbol.Name} = ({sourceClassName})value;");
+                                codeWriter.AppendLine($"this.{variableTypeMeta.Symbol.Name} = ({sourceClassName})value;");
                                 codeWriter.EndBlock();
                             }
 
@@ -229,12 +246,12 @@ namespace Amenonegames.AutoPropertyGenerator
                             codeWriter.BeginBlock();
                             if (typeIsSame)
                             {
-                                codeWriter.AppendLine($"this.{fieldtypeMeta.Symbol.Name} = value;");
+                                codeWriter.AppendLine($"this.{variableTypeMeta.Symbol.Name} = value;");
                                 codeWriter.EndBlock();
                             }
                             else
                             {
-                                codeWriter.AppendLine($"this.{fieldtypeMeta.Symbol.Name} = ({sourceClassName})value;");
+                                codeWriter.AppendLine($"this.{variableTypeMeta.Symbol.Name} = ({sourceClassName})value;");
                                 codeWriter.EndBlock();
                             }
 
@@ -358,6 +375,18 @@ namespace AutoProperty
         
     }
 
+    class Comparer : IEqualityComparer<(GeneratorAttributeSyntaxContext, Compilation)>
+    {
+        public static readonly Comparer Instance = new();
 
-    
+        public bool Equals((GeneratorAttributeSyntaxContext, Compilation) x, (GeneratorAttributeSyntaxContext, Compilation) y)
+        {
+            return x.Item1.TargetNode.Equals(y.Item1.TargetNode);
+        }
+
+        public int GetHashCode((GeneratorAttributeSyntaxContext, Compilation) obj)
+        {
+            return obj.Item1.TargetNode.GetHashCode();
+        }
+    }
 }
