@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.RegularExpressions;
 using Amenonegames.SourceGenerator;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.DotnetRuntime.Extensions;
 using Microsoft.CodeAnalysis.Text;
@@ -42,22 +43,29 @@ namespace Amenonegames.AutoPropertyGenerator
                     }
                     
                     var codeWriter = new CodeWriter();
-                    
-                    foreach (var (x,_) in list)
-                    {
-                        var typeMeta = new TypeMeta(
-                            (TypeDeclarationSyntax)x.TargetNode,
-                            (INamedTypeSymbol)x.TargetSymbol,
-                            x.Attributes.First(),
-                            references);
 
-                        if (TryEmit(typeMeta, codeWriter, references, sourceProductionContext))
+                    var typeMetaList = new List<FieldTypeMeta>();
+                    
+                    foreach (var (x,y) in list)
+                    {
+                        typeMetaList.Add
+                        (
+                            new FieldTypeMeta(y,
+                            (FieldDeclarationSyntax)x.TargetNode,
+                            (INamedTypeSymbol)x.TargetSymbol,
+                            x.Attributes,
+                            references)
+                        );
+                    }
+
+                    var classGrouped = typeMetaList.GroupBy( x  => x.ClassSymbol);
+
+                    foreach (var classed in classGrouped)
+                    {
+                        if (TryEmit(classed, codeWriter, references, sourceProductionContext))
                         {
-                            var fullType = typeMeta.FullTypeName
-                                .Replace("global::", "")
-                                .Replace("<", "_")
-                                .Replace(">", "_");
-                            sourceProductionContext.AddSource($"{fullType}.g.cs", codeWriter.ToString());
+                            var className = classed.Key.Name;
+                            sourceProductionContext.AddSource($"{className}.g.cs", codeWriter.ToString());
                         }
                         codeWriter.Clear();
                     }
@@ -66,34 +74,41 @@ namespace Amenonegames.AutoPropertyGenerator
         }
 
         static bool TryEmit(
-            TypeMeta typeMeta,
+            IGrouping<INamedTypeSymbol,FieldTypeMeta>? typeMetaGroup,
             CodeWriter codeWriter,
             ReferenceSymbols references,
             in SourceProductionContext context)
         {
+            FieldTypeMeta[] fieldTypeMetas = new FieldTypeMeta[] { };
+            INamedTypeSymbol classSymbol = null;
+            ClassDeclarationSyntax? classSyntax = null;
+            var error = false;
+            
             try
             {
-                var error = false;
-                
-                // 親クラスを取得
-                var classDeclaration = typeMeta.Syntax.Parent as ClassDeclarationSyntax;
-
-                if (classDeclaration == null)
+                if (typeMetaGroup is not null)
+                {
+                    fieldTypeMetas = typeMetaGroup.ToArray();
+                    // 親クラスを取得
+                    classSymbol = typeMetaGroup.Key;
+                    classSyntax = typeMetaGroup.First().ClassSyntax;
+                }
+            
+                if (classSymbol is null || classSyntax is null)
                 {
                     context.ReportDiagnostic(Diagnostic.Create(
-                        DiagnosticDescriptors.MustBePartial,
-                        typeMeta.Syntax.Identifier.GetLocation(),
-                        typeMeta.Symbol.Name));
+                        DiagnosticDescriptors.ClassNotFound,
+                        fieldTypeMetas.First().Syntax.GetLocation(),
+                        String.Join("/",fieldTypeMetas.Select(x => x.VariableSyntax))));
                     error = true;
                 }
-                
                 // verify is partial
-                if (!typeMeta.IsPartial())
+                else if (!classSyntax.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword)))
                 {
                     context.ReportDiagnostic(Diagnostic.Create(
                         DiagnosticDescriptors.MustBePartial,
-                        typeMeta.Syntax.Identifier.GetLocation(),
-                        typeMeta.Symbol.Name));
+                        classSyntax.Identifier.GetLocation(),
+                        classSyntax.Identifier.Text));
                     error = true;
                 }
             }
@@ -106,10 +121,161 @@ namespace Amenonegames.AutoPropertyGenerator
                 return false;
             }
             
-            return true;
+
+            try
+            {
+                var nameSpaceIsGlobal = classSymbol != null && classSymbol.ContainingNamespace.IsGlobalNamespace;
+                var nameSpaceStr = nameSpaceIsGlobal ? "" : $"namespace {classSymbol.ContainingNamespace.ToDisplayString()}\n{{\n";
+                var classAccessiblity = classSymbol?.DeclaredAccessibility.ToString().ToLower();
+                
+                codeWriter.AppendLine(nameSpaceStr);
+                if(!nameSpaceIsGlobal) codeWriter.BeginBlock();
+                
+                codeWriter.AppendLine("// This class is generated by AutoPropertyGenerator.");
+                codeWriter.AppendLine($"{classAccessiblity} partial class {classSymbol?.Name}");
+                
+                foreach (var fieldtypeMeta in fieldTypeMetas)
+                {
+                    var className = fieldtypeMeta?.TargetType?.ToDisplayString();
+                    var sourceClassName = fieldtypeMeta?.TargetType?.ToDisplayString();
+                    if (fieldtypeMeta?.TargetType?.Name is null)
+                    {
+                        context.ReportDiagnostic(Diagnostic.Create(
+                            DiagnosticDescriptors.VaribleNameNotFound,
+                            fieldtypeMeta.Syntax.GetLocation(),
+                            String.Join("/",fieldtypeMeta.VariableSyntax)));
+                        error = true;
+                    }
+                    var propertyName = GetPropertyName(fieldtypeMeta?.TargetType?.Name);
+                    bool typeIsSame = className == sourceClassName;
+                    switch (fieldtypeMeta.AXSArgument)
+                    {
+                        case AXS.PrivateGet:
+                        case AXS.PrivateGetSet:
+                            codeWriter.AppendLine($"private");
+                            break;
+                        case AXS.PublicGet:
+                        case AXS.PublicGetSet:
+                        case AXS.PublicGetPrivateSet:
+                            codeWriter.AppendLine($"public");
+                            break;
+                        case AXS.ProtectedGet:
+                        case AXS.ProtectedGetSet:
+                        case AXS.ProtectedGetPrivateSet:
+                            codeWriter.AppendLine($"protected");
+                            break;
+                        case AXS.InternalGet:
+                        case AXS.InternalGetSet:
+                        case AXS.InternalGetPrivateSet:
+                            codeWriter.AppendLine($"internal");
+                            break;
+                        case AXS.ProtectedInternalGet:
+                        case AXS.ProtectedInternalGetSet:
+                        case AXS.ProtectedInternalGetPrivateSet:
+                            codeWriter.AppendLine($"protected internal");
+                            break;
+                        default:
+                            context.ReportDiagnostic(Diagnostic.Create(
+                                DiagnosticDescriptors.AXSNotFound,
+                                fieldtypeMeta.Syntax.GetLocation(),
+                                String.Join("/",fieldtypeMeta.VariableSyntax)));
+                            error = true;
+                            break;
+                    }
+                    
+                    codeWriter.Append($" {className} {propertyName}", false);
+                    codeWriter.BeginBlock();
+                    codeWriter.AppendLine("get");
+                    codeWriter.BeginBlock();
+                    
+                    if (typeIsSame)
+                    {
+                        codeWriter.AppendLine($"return this.{fieldtypeMeta.Symbol.Name};");
+                        codeWriter.EndBlock();
+                    }
+                    else
+                    {
+                        codeWriter.AppendLine($"return ({className})this.{fieldtypeMeta.Symbol.Name};");
+                        codeWriter.EndBlock();
+                    }
+
+                    switch (fieldtypeMeta.AXSArgument)
+                    {
+                        case AXS.PrivateGetSet:
+                        case AXS.ProtectedGetSet:
+                        case AXS.PublicGetSet:
+                        case AXS.InternalGetSet:
+                        case AXS.ProtectedInternalGetSet:
+                            codeWriter.AppendLine("set");
+                            codeWriter.BeginBlock();
+                            if (typeIsSame)
+                            {
+                                codeWriter.AppendLine($"this.{fieldtypeMeta.Symbol.Name} = value;");
+                                codeWriter.EndBlock();
+                            }
+                            else
+                            {
+                                codeWriter.AppendLine($"this.{fieldtypeMeta.Symbol.Name} = ({sourceClassName})value;");
+                                codeWriter.EndBlock();
+                            }
+
+                            break;
+
+                        case AXS.PublicGetPrivateSet:
+                        case AXS.ProtectedGetPrivateSet:
+                        case AXS.InternalGetPrivateSet:
+                        case AXS.ProtectedInternalGetPrivateSet:
+                            codeWriter.AppendLine("private set");
+                            codeWriter.BeginBlock();
+                            if (typeIsSame)
+                            {
+                                codeWriter.AppendLine($"this.{fieldtypeMeta.Symbol.Name} = value;");
+                                codeWriter.EndBlock();
+                            }
+                            else
+                            {
+                                codeWriter.AppendLine($"this.{fieldtypeMeta.Symbol.Name} = ({sourceClassName})value;");
+                                codeWriter.EndBlock();
+                            }
+
+                            break;
+                    }
+                    codeWriter.EndBlock();
+
+                }
+                
+                codeWriter.EndBlock();
+                if(!nameSpaceIsGlobal) codeWriter.EndBlock();
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                context.ReportDiagnostic(Diagnostic.Create(
+                    DiagnosticDescriptors.UnexpectedErrorDescriptor,
+                    Location.None,
+                    ex.ToString()));
+                return false;
+            }
+            
         }
 
 
+        static string? GetNamespace(ClassDeclarationSyntax classDeclaration)
+        {
+            var current = classDeclaration.Parent;
+            while (current != null)
+            {
+                if (current is NamespaceDeclarationSyntax namespaceDeclaration)
+                {
+                    return namespaceDeclaration.Name.ToString();
+                }
+                current = current.Parent;
+            }
+
+            return null; // グローバル名前空間にある場合
+        }
+        
         private void SetDefaultAttribute(IncrementalGeneratorPostInitializationContext context)
         {
             // AutoPropertyAttributeのコード本体
@@ -171,221 +337,8 @@ namespace AutoProperty
                 SourceText.From(AttributeText,Encoding.UTF8)
             );
         }
-
-        void Emit( SourceProductionContext sourceProductionContext, (Compilation compilation, ImmutableArray<(GeneratorAttributeSyntaxContext attrContext, Compilation attrCompilation)> attrArray) t)
-        {
-            //Context.SyntaxReceiverというプロパティに格納されているので
-            //それを取得する
-            var receiver = context.SyntaxReceiver as SyntaxReceiver;
-            if (receiver == null) return;
-            
-            var fieldSymbols = new List<(IFieldSymbol field, ITypeSymbol sourceType , ITypeSymbol targetType , AXS acess)>();
-
-            foreach (var field in receiver.TargetFields)
-            {
-                var model = context.Compilation.GetSemanticModel(field.field.SyntaxTree);
-                foreach (var variable in field.field.Declaration.Variables)
-                {
-                    var fieldSymbol = model.GetDeclaredSymbol(variable) as IFieldSymbol;
-
-                    var arguments = field.attr.ArgumentList?.Arguments;
-                    (IFieldSymbol field, ITypeSymbol sourceType , ITypeSymbol targetType , AXS acess) result =
-                        (fieldSymbol, fieldSymbol.Type, fieldSymbol.Type, AXS.PublicGet); // デフォルトアクセスレベルを変える場合は、ここを変更する
-                    if (arguments.HasValue)
-                    {
-                        foreach (var argument in arguments)
-                        {
-                            var expr = argument.Expression;
-                            
-                            if ( expr is TypeOfExpressionSyntax typeOfExpr)
-                            {
-                                var typeSymbol = model.GetSymbolInfo(typeOfExpr.Type).Symbol as ITypeSymbol;
-                                result.targetType = typeSymbol;
-                            }
-                            //if (argument.NameEquals?.Name.Identifier.Text == "access")
-                            else
-                            {
-                                var parsed = Enum.ToObject(typeof(AXS), model.GetConstantValue(expr).Value);
-                                result.acess = (AXS)parsed;
-                            }
-           
-                        }
-                    }
-                    fieldSymbols.Add(result);
-                }
-            }
-            
-            //クラス単位にまとめて、そこからpartialなクラスを生成したいので、
-            //クラス名をキーにしてグループ化する
-            foreach (var group in fieldSymbols.GroupBy(field=>field.field.ContainingType))
-            {
-                //classSourceにクラス定義のコードが入る
-                var classSource = ProcessClass(group.Key, group.ToList());
-                //クラス名.Generated.csという名前でコード生成
-                context.AddSource
-                    (
-                        $"{group.Key.Name}.Generated.cs",
-                        SourceText.From(classSource,Encoding.UTF8)
-                    );
-
-            }
-            
-        }
         
-        private string ProcessClass(INamedTypeSymbol classSymbol, List<(IFieldSymbol field, ITypeSymbol sourceType , ITypeSymbol targetType , AXS acess)> fieldSymbols)
-        {
-            var classAccessiblity = classSymbol.DeclaredAccessibility.ToString().ToLower();
-            var namespaceName = classSymbol.ContainingNamespace.IsGlobalNamespace ? "" : $"namespace {classSymbol.ContainingNamespace.ToDisplayString()}\n{{\n";
-            var classDeclaration = $@"
-    // This class is generated by AutoPropertyGenerator.
-    {classAccessiblity} partial class {classSymbol.Name}
-    {{
-";
-
-            var builder = new StringBuilder();
-            builder.Append(namespaceName);
-            builder.Append(classDeclaration);
-
-            foreach (var (field, sourceType, targetType, acess) in fieldSymbols)
-            {
-                var className = targetType.ToDisplayString();
-                var sourceClassName = sourceType.ToDisplayString();
-                var propertyName = GetPropertyName(field.Name);
-                bool typeIsSame = className == sourceClassName;
-
-                switch (acess)
-                {
-                    case AXS.PrivateGet:
-                    case AXS.PrivateGetSet:
-                        builder.Append($@"
-        private {className} {propertyName}
-        {{
-            get
-            {{");
-                        break;
-                    case AXS.PublicGet:
-                    case AXS.PublicGetSet:
-                    case AXS.PublicGetPrivateSet:
-                        builder.Append($@"
-        public {className} {propertyName}
-        {{
-            get
-            {{");
-                        break;
-                    case AXS.ProtectedGet:
-                    case AXS.ProtectedGetSet:
-                    case AXS.ProtectedGetPrivateSet:
-                        builder.Append($@"
-        protected {className} {propertyName}
-        {{
-            get
-            {{");
-                        break;
-                    case AXS.InternalGet:
-                    case AXS.InternalGetSet:
-                    case AXS.InternalGetPrivateSet:
-                        builder.Append($@"
-        internal {className} {propertyName}
-        {{
-            get
-            {{");
-                        break;
-                    case AXS.ProtectedInternalGet:
-                    case AXS.ProtectedInternalGetSet:
-                    case AXS.ProtectedInternalGetPrivateSet:
-                        builder.Append($@"
-        protected internal {className} {propertyName}
-        {{
-            get
-            {{");
-                        break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
-                
-                if (typeIsSame)
-                {
-                        builder.Append($@"
-                return this.{field.Name};
-            }}");
-                }
-                else
-                {
-                    builder.Append($@"
-            return ({className})this.{field.Name};
-            }}");
-                }
-                
-
-                switch (acess)
-                {
-                    case AXS.PrivateGetSet:
-                    case AXS.ProtectedGetSet:
-                    case AXS.PublicGetSet:
-                    case AXS.InternalGetSet:
-                    case AXS.ProtectedInternalGetSet:
-                        builder.Append($@"
-            set
-            {{");
-                        if (typeIsSame)
-                        {
-                        builder.Append($@"
-                this.{field.Name} = value;
-            }}");
-                        }
-                        else
-                        {
-                        builder.Append($@"
-                this.{field.Name} = ({sourceClassName})value;
-            }}");
-                        }
-
-                    break;
-                        
-                    case AXS.PublicGetPrivateSet:
-                    case AXS.ProtectedGetPrivateSet:
-                    case AXS.InternalGetPrivateSet:
-                    case AXS.ProtectedInternalGetPrivateSet:
-                        builder.Append($@"
-            private set
-            {{");
-                        if (typeIsSame)
-                        {
-                            builder.Append($@"
-                this.{field.Name} = value;
-            }}");
-                        }
-                        else
-                        {
-                            builder.Append($@"
-                this.{field.Name} = ({sourceClassName})value;
-            }}");
-                        }
-                        
-                        break;
-                    
-
-                }
-
-                    builder.Append($@"
-        }}
-");
-            }
-            
-
-            builder.Append(@"
-    }"); // Close class
-            if (!classSymbol.ContainingNamespace.IsGlobalNamespace)
-            {
-                builder.Append(@"
-}"); // Close namespace
-            }
-
-            return builder.ToString();
-        }
-
-        
-        private string GetPropertyName(string fieldName)
+        private static string GetPropertyName(string fieldName)
         {
             
             // 最初の大文字に変換可能な文字を探す
@@ -401,54 +354,8 @@ namespace AutoProperty
             // 大文字に変換可能な文字がない場合
             return "NoLetterCanUppercase";
         }
-        
-        private (bool Implicit ,bool Explicit) CheckConversionInType(ITypeSymbol typeToCheck, ITypeSymbol targetType)
-        {
-            (bool Implicit ,bool Explicit) result = (false ,false);
-                    
-            foreach (var member in typeToCheck.GetMembers())
-            {
-                if (member is IMethodSymbol methodSymbol &&
-                    methodSymbol.MethodKind == MethodKind.Conversion &&
-                    methodSymbol.ReturnType.Equals(targetType, SymbolEqualityComparer.Default))
-                {
-                    if(methodSymbol.IsImplicitlyDeclared)
-                        result.Implicit = true;
-                    else
-                        result.Explicit = true;
-                }
-            }
-            
-            return result;
-        }
-        
-        
 
         
-        // class SyntaxReceiver : ISyntaxReceiver
-        // {
-        //     public List<(FieldDeclarationSyntax field, AttributeSyntax attr)> TargetFields { get; } = new List<(FieldDeclarationSyntax field, AttributeSyntax attr)>();
-        //
-        //     public void OnVisitSyntaxNode(SyntaxNode syntaxNode)
-        //     {
-        //         if (syntaxNode is FieldDeclarationSyntax field)
-        //         {
-        //             foreach (var attributeList in field.AttributeLists)
-        //             {
-        //                 foreach (var attribute in attributeList.Attributes)
-        //                 {
-        //                     // ここで属性の名前をチェックします
-        //                     if (attribute.Name.ToString().EndsWith("AutoPropAttribute") ||
-        //                         attribute.Name.ToString().EndsWith("AutoProp")) // 短縮形も考慮
-        //                     {
-        //                         TargetFields.Add((field,attribute));
-        //                         return; // 一致する属性が見つかったら、他の属性はチェックしない
-        //                     }
-        //                 }
-        //             }
-        //         }
-        //     }
-        // }
     }
 
 

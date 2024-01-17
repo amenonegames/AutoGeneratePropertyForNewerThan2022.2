@@ -34,19 +34,12 @@ public class ReferenceSymbols
 
         return new ReferenceSymbols
         {
-            YamlObjectAttribute = yamlObjectAttribute,
-            YamlMemberAttribute = compilation.GetTypeByMetadataName("VYaml.Annotations.YamlMemberAttribute")!,
-            YamlIgnoreAttribute = compilation.GetTypeByMetadataName("VYaml.Annotations.YamlIgnoreAttribute")!,
-            YamlConstructorAttribute = compilation.GetTypeByMetadataName("VYaml.Annotations.YamlConstructorAttribute")!,
-            YamlObjectUnionAttribute = compilation.GetTypeByMetadataName("VYaml.Annotations.YamlObjectUnionAttribute")!,
-            NamingConventionEnum = compilation.GetTypeByMetadataName("VYaml.Annotations.NamingConvention")!
+            AXSAttribute = compilation.GetTypeByMetadataName("AutoProperty.AXS")!,
+            TypeAttribute = compilation.GetTypeByMetadataName("System.Type")!,
         };
     }
 
-    public INamedTypeSymbol YamlObjectAttribute { get; private set; } = default!;
-    public INamedTypeSymbol YamlMemberAttribute { get; private set; } = default!;
-    public INamedTypeSymbol YamlIgnoreAttribute { get; private set; } = default!;
-    public INamedTypeSymbol YamlConstructorAttribute { get; private set; } = default!;
-    public INamedTypeSymbol YamlObjectUnionAttribute { get; private set; } = default!;
-    public INamedTypeSymbol NamingConventionEnum { get; private set; } = default!;
+    public INamedTypeSymbol AXSAttribute { get; private set; } = default!;
+    public INamedTypeSymbol TypeAttribute { get; private set; } = default!;
+
 }
