@@ -22,7 +22,7 @@ namespace Amenonegames.AutoPropertyGenerator
         
         public void Initialize(IncrementalGeneratorInitializationContext  context)
         {
-            context.RegisterPostInitializationOutput(x => SetDefaultAttribute(x));
+            context.RegisterPostInitializationOutput(static x => SetDefaultAttribute(x));
             var provider = context.SyntaxProvider.ForAttributeWithMetadataName
                 (
                     context,
@@ -36,7 +36,7 @@ namespace Amenonegames.AutoPropertyGenerator
             
             context.RegisterSourceOutput(
                 context.CompilationProvider.Combine(provider.Collect()),
-                (sourceProductionContext, t) =>
+                static (sourceProductionContext, t) =>
                 {
 
                     
@@ -52,9 +52,6 @@ namespace Amenonegames.AutoPropertyGenerator
                     var codeWriter = new CodeWriter();
                     var typeMetaList = new List<VariableTypeMeta>();
                     
-                    var typemetalistCount = 0;
-                    var groupCount = 0;
-                    
                     foreach (var (x,y) in list)
                     {
 
@@ -66,9 +63,7 @@ namespace Amenonegames.AutoPropertyGenerator
                                     x.Attributes,
                                     references)
                             );
-                            typemetalistCount++;
-                        
-                        
+                            
                     }
                     
                     var classGrouped = typeMetaList.GroupBy( x  => x.ClassSymbol);
@@ -81,7 +76,6 @@ namespace Amenonegames.AutoPropertyGenerator
                             sourceProductionContext.AddSource($"{className}.g.cs", codeWriter.ToString());
                         }
                         codeWriter.Clear();
-                        groupCount++;
                     }
 
 
@@ -293,7 +287,7 @@ namespace Amenonegames.AutoPropertyGenerator
             return null; // グローバル名前空間にある場合
         }
         
-        private void SetDefaultAttribute(IncrementalGeneratorPostInitializationContext context)
+        private static void SetDefaultAttribute(IncrementalGeneratorPostInitializationContext context)
         {
             // AutoPropertyAttributeのコード本体
             const string AttributeText = @"
